@@ -3,13 +3,13 @@ import tkinter as tk
 import requests
 from bs4 import BeautifulSoup
 
-companyUrl = ''
+baseURL = ''
+searchURL = ''
 # Old regex without negative look-ahead
 #phonePattern = r"\+1\s?\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}|\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}"
 #phonePattern_include800s = r"(?!\+?1?[-. ]?\(?123\)?[-. ]?456[-. ]?7890|\+?1?[-. ]?\(?999\)?[-. ]?999[-. ]?9999)\+1\s?\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}|(?!\+?1?[-. ]?\(?123\)?[-. ]?456[-. ]?7890|\+?1?[-. ]?\(?999\)?[-. ]?999[-. ]?9999)\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}"
 phonePattern = r"(?!\+?1?[-. ]?\(?123\)?[-. ]?456[-. ]?7890|\+?1?[-. ]?\(?999\)?[-. ]?999[-. ]?9999|\+1[-. ]?\(?8|\(?8)\+1\s?\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}|(?!\+?1?[-. ]?\(?123\)?[-. ]?456[-. ]?7890|\+?1?[-. ]?\(?999\)?[-. ]?999[-. ]?9999|\+1[-. ]?\(?8|\(?8)\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}"
 contactButtonPattern = r"(?i)\bContact(?: Us)?\b"
-userURL = ''
 numberList = []
 visitedSites = []
 
@@ -42,6 +42,7 @@ class GUI:
         # Start the GUI
         window.mainloop()
 
+
     # Get user input
     def getUserInput(self, url):
         print("You entered: ", url)
@@ -51,13 +52,20 @@ class GUI:
     # If nothing, look for a button with text "Contact" or "Contact Us"
     # Follow the url for the contact button and re-run the phone number search from there
     def executeSearch(self, url):
+
+        # Remove trailing / from url before doing anything else
+        if url[len(url) - 1] == "/":
+            url = url[0:len(url)-1]
+
+        # Set values
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}
-        global companyUrl
-        companyUrl = url
+        global baseURL
+        baseURL = url
+        searchURL = url
         response = requests.get(url, headers=headers)
 
-        # Look for the phone number within the response
-        self.searchForPhone(response.text)
+        # Search for phone numbers within the base URL
+        self.searchForPhone(response.text, baseURL)
 
         # After first search for phones, if blank numberList, look for contact button
         if len(numberList) == 0:
@@ -71,25 +79,36 @@ class GUI:
             for link in all_links:
                 # Find the contact button if it exists
                 if link(text=re.compile(contactButtonPattern)):
-                    if 'http' in link['href']:
-                        companyUrl = link['href']
+                    if baseURL in link['href']:
+                        # Set the search URL
+                        searchURL = link['href']
+
+                        # Ensure we haven't already visited this site
+                        if searchURL not in visitedSites:
+                            response = requests.get(searchURL, headers=headers)
+                            # Look for the phone number within the response
+                            self.searchForPhone(response.text, searchURL)
+
+                        # Add full link and link minus base URL
+                        visitedSites.append(searchURL)
+                        visitedSites.append(searchURL.replace(baseURL, ""))
                     else:
-                        companyUrl += link['href']
+                        # Append link to base URL
+                        searchURL = baseURL + link['href']
 
-                    # Ensure we haven't already visited this site
-                    if link['href'] not in visitedSites:
-                        response = requests.get(companyUrl, headers=headers)
-                        # Look for the phone number within the response
-                        self.searchForPhone(response.text)
+                        # Ensure we haven't already visited this site
+                        if link['href'] not in visitedSites:
+                            response = requests.get(searchURL, headers=headers)
+                            # Look for the phone number within the response
+                            self.searchForPhone(response.text, searchURL)
 
-                    # Add site to list of searched sites
-                    visitedSites.append(link['href'])
-                    print(visitedSites)
+                        # Add search URL to visited sites
+                        visitedSites.append(searchURL)
 
 
     # Method to search for phone number within the given html
-    def searchForPhone(self, htmlText):
-        print("Looking for phone numbers at: " + companyUrl)
+    def searchForPhone(self, htmlText, searchURL):
+        print("Looking for phone numbers at: " + searchURL)
 
         # One possible issue is a very 'modern' website had 3174750960 listed as the phone number
         # Could we add a check for an html element whose TEXT matches this format as well?
@@ -99,3 +118,4 @@ class GUI:
                 numberList.append(number)
                 
         print(numberList)
+        
