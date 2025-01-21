@@ -1,6 +1,7 @@
 import re
 import tkinter as tk
 import requests
+import getpass
 from tkinter import filedialog
 from tkinter import *
 from selenium import webdriver
@@ -10,23 +11,17 @@ from bs4 import BeautifulSoup
 from pandas import DataFrame
 from datetime import datetime
 
+# Global variables
 baseURL = ''
 searchURL = ''
-# Old regex without negative look-ahead
-#phonePattern = r"\+1\s?\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}|\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}"
-#phonePattern_include800s = r"(?!\+?1?[-. ]?\(?123\)?[-. ]?456[-. ]?7890|\+?1?[-. ]?\(?999\)?[-. ]?999[-. ]?9999)\+1\s?\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}|(?!\+?1?[-. ]?\(?123\)?[-. ]?456[-. ]?7890|\+?1?[-. ]?\(?999\)?[-. ]?999[-. ]?9999)\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}"
-#phonePattern_exclude_all_800s = r"(?!\+?1?[-. ]?\(?123\)?[-. ]?456[-. ]?7890|\+?1?[-. ]?\(?999\)?[-. ]?999[-. ]?9999|\+1[-. ]?\(?8|\(?8)\+1\s?\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}|(?!\+?1?[-. ]?\(?123\)?[-. ]?456[-. ]?7890|\+?1?[-. ]?\(?999\)?[-. ]?999[-. ]?9999|\+1[-. ]?\(?8|\(?8)\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}"
-phonePattern = r"(?!\+?1?[-. ]?\(?123\)?[-. ]?456[-. ]?7890|\+?1?[-. ]?\(?999\)?[-. ]?999[-. ]?9999|\+1[-. ]?\(?8|\(?8)\+1\s?\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}|(?!\+?1?[-. ]?\(?123\)?[-. ]?456[-. ]?7890|\+?1?[-. ]?\(?999\)?[-. ]?999[-. ]?9999|\+1[-. ]?\(?8|\(?8)\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}"
-# The following phone pattern only excludes phone numbers starting with 8 and two consecutive numbers
-#phonePattern = r"(?!\+?1?[-. ]?\(?123\)?[-. ]?456[-. ]?7890|\+?1?[-. ]?\(?999\)?[-. ]?999[-. ]?9999|\+1[-. ]?\(?8(\d)\1|\(?8(\d)\2)\+1\s?\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}|(?!\+?1?[-. ]?\(?123\)?[-. ]?456[-. ]?7890|\+?1?[-. ]?\(?999\)?[-. ]?999[-. ]?9999|\+1[-. ]?\(?8(\d)\1|\(?8(\d)\2)\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}"
-#phonePattern = r"\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}"
-#phonePattern = r"(?!\+?1?[-. ]?\(?123\)?[-. ]?456[-. ]?7890|\+?1?[-. ]?\(?999\)?[-. ]?999[-. ]?9999|\+1[-. ]?\(?8(\d)\1|\(?8(\d)\2))(\(?\d{3}\)?)[-.\s]?(\d{3})[-.\s]?(\d{4})"
-contactButtonPattern = r"(?i)\bContact(?: Us)?\b"
 numberList = []
 visitedSites = []
+
+# Initialize tkinter window
 window = tk.Tk()
 window.iconbitmap('icon_hd.ico')
 
+# My company search GUI class
 class GUI:
     def __init__(self, name):
         self.name = name
@@ -64,26 +59,20 @@ class GUI:
         # Start the GUI
         window.mainloop()
 
-
-    # Get user input
-    def getUserInput(self, url):
-        print("You entered: ", url)
-
     
     # This method retrieves company information from the BBB website
     def executeBBBSearch(self, companyType, state):
-        
         pageNumber = 1
         name_array = []
         number_array = []
         address_array = []
         validSite = True
-        while(pageNumber <= 5):
+        while(pageNumber <= 15):
             print("Page number: " + str(pageNumber))
             # Web access setup
             options = Options()
             options.add_argument("--headless=new")
-            # Is this what I need to get beautiful soup to work??
+            # User Agent to avoid looking like a bot
             user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'
             options.add_argument(f'user-agent={user_agent}')
             dr = webdriver.Chrome(options=options)
@@ -101,11 +90,10 @@ class GUI:
             except:
                 break
 
-            #with open("test.html", "w") as text_file:
-            #    text_file.write(dr.page_source)
-            #bs = BeautifulSoup(dr.page_source, "html.parser")
+            # Use selenium to find company css cards
             divs = dr.find_elements(By.CLASS_NAME, 'result-card')
 
+            # Loop through identified company css cards
             for div in divs:
                 try:
                     name = div.find_element(By.CLASS_NAME, 'result-business-name')
@@ -122,98 +110,18 @@ class GUI:
                     print("There was an error")
                     print(div.text)
         
-            # Increment page number
+            # Increment page number before next iteration
             pageNumber += 1
+
 
         # Set up excel sheet
         df = DataFrame({'Company Name': name_array, 'Phone Number': number_array, 'Address': address_array})
-        with filedialog.asksaveasfile(mode='w', defaultextension='.xlsx') as file:
+        print('Saving file in downloads for ' + getpass.getuser())
+        with filedialog.asksaveasfile(
+            mode='w', 
+            initialdir=f'C:\\users\\{getpass.getuser()}\\downloads', 
+            initialfile=f'{companyType.replace(' ','_')}_{state}.xlsx', 
+            defaultextension='.xlsx', 
+            filetypes=[('Excel Files', '*.xlsx'), ('CSV Files', '*.csv')]
+        ) as file:
             df.to_excel(file.name)
-
-        window.quit()
-
-
-# ******** CODE BELOW HERE IS NOT BEING USED AT THE MOMENT ******************
-
-
-    # Method to search for phone number within the given html
-    def searchForPhone(self, htmlText, searchURL):
-        print("Looking for phone numbers at: " + searchURL)
-
-        # One possible issue is a very 'modern' website had 3174750960 listed as the phone number
-        # Could we add a check for an html element whose TEXT matches this format as well?
-        matches = re.findall(phonePattern, htmlText)
-        print(matches)
-        for number in matches:
-            if (number not in numberList):
-
-                numberList.append(number)
-                
-        print(numberList)
-        
-
-
-    # Look for phone numbers on main companypage
-    # If nothing, look for a button with text "Contact" or "Contact Us"
-    # Follow the url for the contact button and re-run the phone number search from there
-    def executeSearch(self, url):
-
-        # Remove trailing / from url before doing anything else
-        if url[len(url) - 1] == "/":
-           url = url[0:len(url)-1]
-
-        # Set values
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}
-        global baseURL
-        baseURL = url
-        searchURL = url
-        try:
-            response = requests.get(url, headers=headers)
-            #print(response.text)
-        except:
-            #pass
-            return
-        
-        # Search for phone numbers within the base URL
-        #for chunk in response.iter_content(chunk_size=1024):
-        self.searchForPhone(response.text, baseURL)
-        #self.searchForPhone(url, baseURL)
-        
-
-        # After first search for phones, if blank numberList, look for contact button
-        if len(numberList) == 0:
-            # Parse the HTML content of the response
-            soup = BeautifulSoup(response.content, "html.parser")
-            
-            # Make a list of all link elements with href
-            all_links = soup.find_all('a', href=True)
-
-            # Loop through all site links
-            for link in all_links:
-                # Find the contact button if it exists
-                if link(text=re.compile(contactButtonPattern)):
-                    if baseURL in link['href']:
-                        # Set the search URL
-                        searchURL = link['href']
-
-                        # Ensure we haven't already visited this site
-                        if searchURL not in visitedSites:
-                            response = requests.get(searchURL, headers=headers)
-                            # Look for the phone number within the response
-                            self.searchForPhone(response.text, searchURL)
-
-                        # Add full link and link minus base URL
-                        visitedSites.append(searchURL)
-                        visitedSites.append(searchURL.replace(baseURL, ""))
-                    else:
-                        # Append link to base URL
-                        searchURL = baseURL + link['href']
-
-                        # Ensure we haven't already visited this site
-                        if link['href'] not in visitedSites:
-                            response = requests.get(searchURL, headers=headers)
-                            # Look for the phone number within the response
-                            self.searchForPhone(response.text, searchURL)
-
-                        # Add search URL to visited sites
-                        visitedSites.append(searchURL)
