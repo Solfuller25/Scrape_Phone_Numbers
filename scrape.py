@@ -2,8 +2,7 @@
 from gui import GUI
 
 def main():
-    test = GUI("test")
-    print(test.greet())
+    GUI("Company Search")
 
 if __name__ == '__main__':
     main()
